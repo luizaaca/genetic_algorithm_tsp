@@ -22,16 +22,42 @@ To run the TSP solver, execute the `tsp.py` script using Python. The solver allo
 
 You can customize parameters such as population size, number of generations, and mutation probability directly in the `tsp.py` script.
 
+
 ## Dependencies
 
 - Python 3.x
-- Pygame (for visualization)
+- Pygame
+- Numpy
+- Matplotlib
 
-Ensure Pygame is installed before running the solver. You can install Pygame using pip:
+All dependencies are listed in `requirements.txt`.
 
-```bash
-pip install pygame
-```
+## Installation and Usage
+
+1. **Clone the repository:**
+	```bash
+	git clone <repository-url>
+	cd genetic_algorithm_tsp
+	```
+2. **Create and activate a virtual environment:**
+	- On Windows (cmd):
+	  ```cmd
+	  python -m venv .venv
+	  .venv\Scripts\activate
+	  ```
+	- On Bash (Git Bash, WSL, etc):
+	  ```bash
+	  python -m venv .venv
+	  source .venv/Scripts/activate
+	  ```
+3. **Install the dependencies:**
+	```bash
+	pip install -r requirements.txt
+	```
+4. **Run the solver:**
+	```bash
+	python tsp.py
+	```
 
 ## Acknowledgments
 
