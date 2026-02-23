@@ -25,7 +25,7 @@ NODE_RADIUS = 10
 FPS = 30
 PLOT_X_OFFSET = 450
 
-STALE_LIMIT = 500  # Number of generations to wait for improvement before stopping
+STALE_LIMIT = 50  # Number of generations to wait for improvement before stopping
 
 # GA
 N_CITIES = 20
@@ -181,22 +181,22 @@ while running:
             # simple selection based on first 10 best solutions
             # parent1, parent2 = random.choices(population[:10], k=2)
 
-            if stale_counter >= STALE_LIMIT:
-                print(
-                    f"No improvement in fitness for {STALE_LIMIT} generations. Applying tournament selection."
-                )
-                # tournament selection: select 10 random individuals and select the best among them as a parent
-                tournament_size = 10
-                tournament = random.sample(population[1:], tournament_size)
-                parent1 = min(tournament, key=calculate_fitness)
-                tournament = random.sample(population[1:], tournament_size)
-                parent2 = min(tournament, key=calculate_fitness)
-            else:
-                # solution based on fitness probability
-                probability = 1 / np.array(population_fitness)
-                parent1, parent2 = random.choices(
-                    population, weights=probability.tolist(), k=2
-                )
+            # if stale_counter >= STALE_LIMIT:
+            #     print(
+            #         f"No improvement in fitness for {STALE_LIMIT} generations. Applying tournament selection."
+            #     )
+            # tournament selection: select 10 random individuals and select the best among them as a parent
+            tournament_size = 10
+            tournament = random.sample(population[1:], tournament_size)
+            parent1 = min(tournament, key=calculate_fitness)
+            tournament = random.sample(population[1:], tournament_size)
+            parent2 = min(tournament, key=calculate_fitness)
+            # else:
+            #     # solution based on fitness probability
+            #     probability = 1 / np.array(population_fitness)
+            #     parent1, parent2 = random.choices(
+            #         population, weights=probability.tolist(), k=2
+            #     )
 
             child1 = order_crossover(parent1, parent2)
             # child1 = order_crossover(parent1, parent1)
@@ -206,8 +206,8 @@ while running:
                 )
                 child1 = mutate_shuffle_with_intensity(child1, 1, 1)
             else:
-                # child1 = mutate(child1, MUTATION_PROBABILITY)
-                child1 = mutate_shuffle_with_intensity(child1, 0.7, 0.3)
+                child1 = mutate(child1, MUTATION_PROBABILITY)
+                # child1 = mutate_shuffle_with_intensity(child1, 0.7, 0.3)
 
             new_population.append(child1)
 
@@ -234,7 +234,7 @@ while running:
     clock.tick(FPS)
 
 # TODO: save the best individual in a file if it is better than the one saved.
-input("Press Enter to exit...")
+# input("Press Enter to exit...")
 # exit software
 pygame.quit()
 sys.exit()

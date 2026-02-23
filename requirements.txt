@@ -1,3 +1,6 @@
 pygame
 numpy
 matplotlib
+osmnx
+osmium
+geopandas
