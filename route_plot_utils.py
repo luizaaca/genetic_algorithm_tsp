@@ -14,12 +14,13 @@ class RouteSegmentsInfo:
     segments: List[dict] = field(default_factory=list)
     total_eta: float = 0.0
     total_length: float = 0.0
+    total_cost: float | None = None
 
 
 global_graph = None
 
 
-def compute_route_segments_info(graph, route, weight_function):
+def compute_route_segments_info(graph, route, weight_function, cost_function=None):
     """
     Calcula os segmentos, ETA e comprimento total, retornando um objeto RouteSegmentsInfo.
     """
@@ -28,16 +29,21 @@ def compute_route_segments_info(graph, route, weight_function):
     segments = []
     total_eta = 0
     total_length = 0
+    total_cost = 0 if cost_function else None
     num_segments = len(route)
     for i in range(num_segments):
-        start = route[i]
-        end = route[(i + 1) % num_segments]
+        start = route[i][1]
+        end = route[(i + 1) % num_segments][1]
         eta, segment = nx.single_source_dijkstra(
             graph, start, end, weight=weight_function
         )
         length = path_weight_sum(graph, segment)
         total_eta += eta
         total_length += length
+        cost = None
+        if cost_function:
+            cost = cost_function(eta)
+            total_cost += cost
         segments.append(
             {
                 "start": start,
@@ -45,10 +51,16 @@ def compute_route_segments_info(graph, route, weight_function):
                 "eta": eta,
                 "length": length,
                 "segment": segment,
+                "cost": cost,
+                "name": route[(i + 1) % num_segments][0],
+                "coords": route[(i + 1) % num_segments][2],
             }
         )
     return RouteSegmentsInfo(
-        segments=segments, total_eta=total_eta, total_length=total_length
+        segments=segments,
+        total_eta=total_eta,
+        total_length=total_length,
+        total_cost=total_cost,
     )
 
 
@@ -72,6 +84,7 @@ def plot_route_segments_info(graph, route_segments_info):
         ax=ax,
         show=False,
     )
+
     for i, seg in enumerate(route_segments_info.segments):
         color = mcolors.to_hex(colors[i])
         ox.plot_graph_route(
@@ -101,6 +114,24 @@ def plot_route_segments_info(graph, route_segments_info):
                 facecolor="white", edgecolor=color, boxstyle="circle,pad=0.3", alpha=0.9
             ),
             zorder=6,
+        )
+        # Plotar pontos de interesse (nome do local) próximo ao ponto de chegada
+        ax.scatter(
+            seg["coords"][0],
+            seg["coords"][1],
+            c="red",
+            s=100,
+            marker="X",
+            label="Pontos de Interesse",
+            zorder=5,
+        )
+        ax.annotate(
+            seg["name"],
+            (seg["coords"][0], seg["coords"][1]),
+            xytext=(5, 5),
+            textcoords="offset points",
+            fontsize=9,
+            fontweight="bold",
         )
     legend_elements = []
     for i, seg in enumerate(route_segments_info.segments):
