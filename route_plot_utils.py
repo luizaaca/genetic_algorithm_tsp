@@ -20,9 +20,23 @@ class RouteSegmentsInfo:
 global_graph = None
 
 
-def compute_route_segments_info(graph, route, weight_function, cost_function=None):
+def compute_route_segments_info(
+    graph: nx.MultiDiGraph,
+    route: List[tuple],
+    weight_function: Any,
+    cost_function: Any = None,
+) -> RouteSegmentsInfo:
     """
     Calcula os segmentos, ETA e comprimento total, retornando um objeto RouteSegmentsInfo.
+
+    Args:
+        graph: Grafo OSMnx projetado.
+        route: Lista de tuplas (nome, node_id, (x, y)) representando a rota.
+        weight_function: Função para calcular o peso (tempo) de cada aresta.
+        cost_function: Função opcional para calcular o custo a partir do ETA (ex: custo de combustível).
+
+    Returns:
+        RouteSegmentsInfo: Objeto contendo informações dos segmentos, ETA e comprimento total.
     """
     global global_graph
     global_graph = graph
@@ -64,9 +78,18 @@ def compute_route_segments_info(graph, route, weight_function, cost_function=Non
     )
 
 
-def plot_route_segments_info(graph, route_segments_info):
+def plot_route_segments_info(
+    graph: nx.MultiDiGraph, route_segments_info: RouteSegmentsInfo
+) -> None:
     """
     Plota os segmentos da rota a partir de um objeto RouteSegmentsInfo.
+
+    Args:
+        graph: Grafo OSMnx projetado.
+        route_segments_info: Objeto RouteSegmentsInfo com informações dos segmentos.
+
+    Returns:
+        None
     """
 
     num_segments = len(route_segments_info.segments)
@@ -158,70 +181,86 @@ def plot_route_segments_info(graph, route_segments_info):
     plt.show()
 
 
-def calculate_weight(u, v, d):
+def calculate_weight(u: Any, v: Any, d: dict) -> float:
+    """
+    Calcula o tempo de travessia de uma aresta considerando comprimento, velocidade máxima e fatores de redução.
+
+    Args:
+        u: Nó de origem.
+        v: Nó de destino.
+        d: Dicionário de atributos da aresta.
+
+    Returns:
+        float: Tempo estimado de travessia em segundos.
+    """
     length = d.get("length")  # em metros
     maxspeed = d.get("maxspeed", 50)  # em km/h
-    # surface = d.get("surface", "unknown")  # tipo de superfície
 
-    # Se for lista, pega o menor valor e converte para float
     if isinstance(maxspeed, list):
         maxspeed = min(
             [float(x) for x in maxspeed if str(x).replace(".", "", 1).isdigit()]
         )
-    # Se for string, converte para float
     elif isinstance(maxspeed, str):
         if maxspeed.replace(".", "", 1).isdigit():
             maxspeed = float(maxspeed)
         else:
-            maxspeed = 50  # valor padrão se não for número
-    # Se não, tenta converter para float
+            maxspeed = 50
     else:
         maxspeed = float(maxspeed)
 
-    # Redução: quanto menor o length, maior a redução de velocidade
-    # Exemplo: redução de até 50% para ruas curtas (<50m)
-    reduction_factor = 1 - min(
-        0.7, 50 / max(length, 1) * 0.9
-    )  # ajuste conforme necessário
+    reduction_factor = 1 - min(0.7, 50 / max(length, 1) * 0.9)
     adjusted_speed = maxspeed * reduction_factor
 
     global global_graph
-    # buscas nodes na edge que sejam "highway == 'traffic_signals'" e reduz a velocidade em 30% para simular o impacto dos semáforos
     if (
         global_graph is not None
         and global_graph.nodes[v].get("highway") == "traffic_signals"
     ):
-        adjusted_speed *= 0.8  # redução de 20% para semáforos
+        adjusted_speed *= 0.8
 
-    return length / (
-        max(adjusted_speed, 1) * 1000 / 3600
-    )  # tempo = distancia / velocidade em segundos
+    return length / (max(adjusted_speed, 1) * 1000 / 3600)
 
 
-def weight_function(u, v, d):
-    """Calcula o peso de uma aresta usando length e maxspeed, com redução para ruas curtas."""
+def weight_function(u: Any, v: Any, d: Any) -> float:
+    """
+    Calcula o peso de uma aresta usando length e maxspeed, com redução para ruas curtas.
+
+    Args:
+        u: Nó de origem.
+        v: Nó de destino.
+        d: Dicionário de atributos da aresta ou dicionário de dicionários.
+
+    Returns:
+        float: Tempo médio estimado de travessia em segundos.
+    """
     weight = []
-    # se d é um dicionario de dicionarios, precisamos efetuar o calculo para cada subdicionario
     if isinstance(d, dict):
-        # se for um dicionario de dicionarios, precisamos iterar sobre os subdicionarios
         for key in d:
             sub_d = d[key]
-            weight.append(
-                calculate_weight(u, v, sub_d)
-            )  # tempo = distancia / velocidade
-    # se d é um dicionario simples, podemos efetuar o calculo diretamente
+            weight.append(calculate_weight(u, v, sub_d))
     else:
-        weight.append(calculate_weight(u, v, d))  # tempo = distancia / velocidade
-    return sum(weight) / len(weight)  # calcular o tempo médio
+        weight.append(calculate_weight(u, v, d))
+    return sum(weight) / len(weight)
 
 
-def path_weight_sum(graph, path, weight="length"):
-    """Calcula a soma dos pesos (como length) ao longo de um caminho."""
+def path_weight_sum(
+    graph: nx.MultiDiGraph, path: List[Any], weight: str = "length"
+) -> float:
+    """
+    Calcula a soma dos pesos (como length) ao longo de um caminho.
+
+    Args:
+        graph: Grafo OSMnx projetado.
+        path: Lista de nós representando o caminho.
+        weight: Nome do atributo a ser somado (default: "length").
+
+    Returns:
+        float: Soma dos pesos ao longo do caminho.
+    """
     total = 0
     for u, v in zip(path[:-1], path[1:]):
         edge_data = graph.get_edge_data(u, v)
         if isinstance(edge_data, dict):
-            # Caso haja múltiplas arestas, pega a primeira
             edge = list(edge_data.values())[0]
         else:
             edge = edge_data

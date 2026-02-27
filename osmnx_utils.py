@@ -9,6 +9,13 @@ def get_short_name_from_coord(lat_lon, dist=50):
     """
     Busca o nome do objeto mais próximo (rua, praça, prédio)
     usando a infraestrutura de cache do OSMnx.
+
+    Args:
+        lat_lon: Tupla (lat, lon) da coordenada.
+        dist: Raio de busca em metros.
+
+    Returns:
+        Nome do objeto mais próximo ou string com coordenadas.
     """
     try:
         # Busca qualquer objeto 'highway' ou 'name' num raio de 50m
@@ -30,30 +37,46 @@ def get_short_name_from_coord(lat_lon, dist=50):
         return "Local desconhecido"
 
 
-def get_center_and_dist(
+def set_coords_and_names_for_locations(
     locations: List[Union[str, Tuple[float, float]]],
-) -> Tuple[Tuple[float, float], float, List[Tuple[Tuple[float, float], str]]]:
+) -> List[Tuple[Tuple[float, float], str]]:
     """
-    locations: lista de strings (endereços) ou tuplas (lat, lon)
+    Para cada local na lista, obtém as coordenadas e o nome curto.
 
-    Retorna: (centroide_tuple, distancia_em_metros, lista_de_tuplas_com_coordenadas_e_nomes)
+    Args:
+        locations: Lista de strings (endereços) ou tuplas (lat, lon).
+
+    Returns:
+        Lista de tuplas ((lat, lon), nome).
     """
-    coords = []
-    names = []
-
+    result = []
     for loc in locations:
         if isinstance(loc, str):
             # Endereço -> Coordenada
             lat_lon = ox.geocoder.geocode(loc)
-            coords.append(lat_lon)
-            names.append(loc)
+            name = loc
         else:
             # Coordenada -> Endereço (Reverse Geocoding)
-            coords.append(loc)
-            # Retorna uma string com o endereço formatado
-            address_name = get_short_name_from_coord(loc)
-            names.append(address_name)
+            lat_lon = loc
+            name = get_short_name_from_coord(loc)
+        result.append((lat_lon, name))
+    return result
 
+
+def get_center_and_dist(
+    coords: List[Tuple[float, float]],
+) -> Tuple[Tuple[float, float], float]:
+    """
+    Calcula o centroide e o raio de abrangência de uma lista de locais.
+
+    Args:
+        coords: Lista de tuplas (lat, lon).
+
+    Returns:
+        Tuple contendo:
+            - centroide_tuple: tupla (lat, lon) do centroide
+            - distancia_em_metros: raio máximo em metros
+    """
     # Criar um objeto MultiPoint (lon, lat para o shapely)
     points = MultiPoint([(lon, lat) for lat, lon in coords])
 
@@ -71,7 +94,7 @@ def get_center_and_dist(
     # para não cortar as ruas nas bordas dos pontos
     max_dist = max(distances) + 200
 
-    return centroid, max_dist, list(zip(coords, names))
+    return centroid, max_dist
 
 
 def find_route_nodes(
@@ -80,12 +103,15 @@ def find_route_nodes(
     verbose: bool = False,
 ) -> List[Tuple[str, int, Tuple[float, float]]]:
     """
-    Recebe:
-        g_proj: grafo OSMnx projetado (com CRS em metros)
-        locations: lista de coordenadas e nomes [(lat, lon), nome]
-        verbose: se True, imprime informações
-    Retorna:
-        Lista de tuplas (nome, node_id, (x, y)) onde (x, y) são as coordenadas em metros no grafo
+    Encontra os nós do grafo mais próximos dos locais informados.
+
+    Args:
+        g_proj: Grafo OSMnx projetado (com CRS em metros).
+        locations: Lista de tuplas ((lat, lon), nome).
+        verbose: Se True, imprime informações detalhadas.
+
+    Returns:
+        Lista de tuplas (nome, node_id, (x, y)), onde (x, y) são as coordenadas projetadas.
     """
     # Transformer para converter lat/lon -> CRS do grafo
     transformer = Transformer.from_crs("EPSG:4326", g_proj.graph["crs"], always_xy=True)
@@ -110,8 +136,11 @@ def set_node_priorities(
 ):
     """
     Define prioridades para os nós do grafo com base na lista de route_nodes e prioridades.
-    route_nodes: lista de tuplas (nome, node_id, (x, y))
-    priorities: lista de inteiros representando as prioridades correspondentes aos nós
+
+    Args:
+        g_proj: Grafo OSMnx projetado.
+        route_nodes: Lista de tuplas (nome, node_id, (x, y)).
+        priorities: Lista de inteiros representando as prioridades correspondentes aos nós.
     """
     for (nome, node_id, (x, y)), priority in zip(route_nodes, priorities):
         g_proj.nodes[node_id]["name"] = nome
@@ -122,15 +151,16 @@ def create_projected_graph_from_point(
     center: Tuple[float, float], dist: float, network_type="drive", filter=None
 ) -> nx.MultiDiGraph:
     """
-    center: tupla (lat, lon) do centro da área
+    Cria um grafo OSMnx projetado a partir de um ponto central e raio.
 
-    dist: distância em metros para definir o raio da área
+    Args:
+        center: Tupla (lat, lon) do centro da área.
+        dist: Distância em metros para definir o raio da área.
+        network_type: Tipo de rede ("drive", "walk", etc.).
+        filter: Filtro personalizado para OSMnx (ex: '["highway"~"primary|secondary"]').
 
-    network_type: tipo de rede ("drive", "walk", etc.)
-
-    filter: filtro personalizado para OSMnx (ex: '["highway"~"primary|secondary"]')
-
-    Retorna: grafo OSMnx projetado
+    Returns:
+        Grafo OSMnx projetado.
     """
 
     # Chama o método do OSMnx
@@ -150,19 +180,34 @@ def create_projected_graph_from_point(
 
 
 def initialize_graph(
-    g_proj: nx.MultiDiGraph,
     origin: str | Tuple[float, float],
     destinations: List[Tuple[Union[str, Tuple[float, float]], int]],
 ) -> Tuple[nx.MultiDiGraph, List[Tuple[str, int, Tuple[float, float]]]]:
     """
-    Inicializa o grafo OSMnx projetado com as locais e prioridades.
-    origin: endereço ou tupla (lat, lon) do ponto de origem
-    destinations: lista de tuplas (endereço ou tupla (lat, lon), prioridade)
-    Retorna: grafo OSMnx projetado e a lista de nós contendo origem e destinos
+    Inicializa o grafo OSMnx projetado com os locais e prioridades.
+
+    Args:
+        origin: Endereço ou tupla (lat, lon) do ponto de origem.
+        destinations: Lista de tuplas (endereço ou tupla (lat, lon), prioridade).
+
+    Returns:
+        Tuple contendo:
+            - grafo OSMnx projetado
+            - lista de nós contendo origem e destinos
     """
+    ox.settings.use_cache = True
+    ox.settings.useful_tags_way = [
+        "highway",
+        "maxspeed",
+        "name",
+        "length",
+        "surface",
+        "oneway",
+    ]
     # Combina origem e destinos em uma única lista de locais
     all_locations = [origin] + [dest[0] for dest in destinations]
-    center, radius, all_locations_info = get_center_and_dist(all_locations)
+    all_locations_info = set_coords_and_names_for_locations(all_locations)
+    center, radius = get_center_and_dist([info[0] for info in all_locations_info])
     # Cria o grafo a partir dos locais
     g_proj = create_projected_graph_from_point(center, radius)
     # Encontra os nós correspondentes aos locais
