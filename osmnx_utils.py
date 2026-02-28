@@ -3,6 +3,11 @@ from pyproj import Transformer
 from shapely.geometry import MultiPoint
 import osmnx as ox
 import networkx as nx
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from matplotlib.lines import Line2D
+import random
+from route_plot_utils import RouteSegmentsInfo
 
 
 def get_short_name_from_coord(lat_lon, dist=50):
@@ -214,3 +219,116 @@ def initialize_graph(
     route_nodes = find_route_nodes(g_proj, all_locations_info)
     set_node_priorities(g_proj, route_nodes[1:], [dest[1] for dest in destinations])
     return g_proj, route_nodes
+
+
+def plot_route_segments_info(
+    graph: nx.MultiDiGraph, route_segments_info: RouteSegmentsInfo
+) -> None:
+    """
+    Plota os segmentos da rota a partir de um objeto RouteSegmentsInfo.
+
+    Args:
+        route_segments_info: Objeto RouteSegmentsInfo com informações dos segmentos.
+
+    Returns:
+        None
+    """
+    num_segments = len(route_segments_info.segments)
+    palette = plt.get_cmap("turbo", num_segments)
+    colors = [palette(i) for i in range(num_segments)]
+    random.shuffle(colors)
+    fig, ax = plt.subplots(figsize=(12, 12), dpi=300)
+    ox.plot_graph(
+        graph,
+        bgcolor="white",
+        node_size=1,
+        edge_color="gray",
+        node_color="red",
+        edge_linewidth=0.4,
+        ax=ax,
+        show=False,
+    )
+
+    for i, seg in enumerate(route_segments_info.segments):
+        color = mcolors.to_hex(colors[i])
+        ox.plot_graph_route(
+            graph,
+            seg["segment"],
+            route_color=color,
+            route_linewidth=3,
+            ax=ax,
+            orig_dest_node_color="none",
+            show=False,
+            close=False,
+        )
+        # Plotar apenas ponto de chegada: número do segmento
+        end_node = seg["end"]
+        x_end = graph.nodes[end_node]["x"]
+        y_end = graph.nodes[end_node]["y"]
+        ax.text(
+            x_end,
+            y_end,
+            str(i + 1),
+            color=color,
+            fontsize=16,
+            fontweight="bold",
+            ha="center",
+            va="center",
+            bbox=dict(
+                facecolor="white",
+                edgecolor=color,
+                boxstyle="circle,pad=0.3",
+                alpha=0.9,
+            ),
+            zorder=6,
+        )
+        # Plotar pontos de interesse (nome do local) próximo ao ponto de chegada
+        ax.scatter(
+            seg["coords"][0],
+            seg["coords"][1],
+            c="red",
+            s=100,
+            marker="X",
+            label="Pontos de Interesse",
+            zorder=5,
+        )
+        ax.annotate(
+            seg["name"],
+            (seg["coords"][0], seg["coords"][1]),
+            xytext=(5, 5),
+            textcoords="offset points",
+            fontsize=9,
+            fontweight="bold",
+        )
+    legend_elements = []
+    for i, seg in enumerate(route_segments_info.segments):
+        color = mcolors.to_hex(colors[i])
+        legend_elements.append(
+            Line2D(
+                [0],
+                [0],
+                color=color,
+                lw=3,
+                label=f"Seg {i+1}: {seg['length']:.1f} m, {seg['eta']/60:.1f} min",
+            )
+        )
+    legend_elements.append(
+        Line2D(
+            [0],
+            [0],
+            color="gray",
+            lw=0.4,
+            label=f"Total: {route_segments_info.total_length:.1f} m, {route_segments_info.total_eta/60:.1f} min",
+        )
+    )
+    legend_elements.append(
+        Line2D(
+            [0],
+            [0],
+            color="gray",
+            lw=0.4,
+            label=f"Total cost: {route_segments_info.total_cost:.1f}",
+        )
+    )
+    ax.legend(handles=legend_elements, loc="best", fontsize=10)
+    plt.show()
